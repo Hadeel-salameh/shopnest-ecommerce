@@ -20,9 +20,9 @@ interface Product {
   description: string | null;
   price: string;
   stock: number;
+  image_url?: string | null; // <-- أضفي هذا السطر هنا
   category: { id: number; name: string } | null;
 }
-
 export default function HomePage() {
   const { user } = useAuth();
   const { cart, addToCart, removeFromCart, clearCart, totalItems } = useCart();

@@ -8,7 +8,7 @@ interface Product {
   description: string | null;
   price: string;
   stock: number;
-  image_url: string | null; // <-- تم إضافة حقل الصورة هنا
+  image_url?: string | null; // تم جعل حقل الصورة اختيارياً لتوافق الأنواع
   category: { id: number; name: string } | null;
 }
 
