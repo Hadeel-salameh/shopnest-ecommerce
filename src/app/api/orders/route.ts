@@ -67,55 +67,49 @@ export async function POST(req: NextRequest) {
     totalPrice += parseFloat(product.price) * item.quantity;
   }
 
-  // Execute the full transaction — atomically create order, items, and deduct stock
+  // Create order, insert order items, and deduct stock sequentially
+  // (neon-http driver does not support db.transaction)
   try {
-    const result = await db.transaction(async (tx) => {
-      // Create the order
-      const [newOrder] = await tx
-        .insert(orders)
-        .values({
-          userId: authUser.userId,
-          totalPrice: totalPrice.toFixed(2),
-          status: "pending",
-        })
-        .returning();
+    const [newOrder] = await db
+      .insert(orders)
+      .values({
+        userId: authUser.userId,
+        totalPrice: totalPrice.toFixed(2),
+        status: "pending",
+      })
+      .returning();
 
-      // Insert order items and deduct stock
-      for (const item of data.items) {
-        const product = productMap.get(item.product_id)!;
+    for (const item of data.items) {
+      const product = productMap.get(item.product_id)!;
 
-        await tx.insert(orderItems).values({
-          orderId: newOrder.id,
-          productId: item.product_id,
-          quantity: item.quantity,
-          // Snapshot price at time of purchase
-          price: product.price,
-        });
+      await db.insert(orderItems).values({
+        orderId: newOrder.id,
+        productId: item.product_id,
+        quantity: item.quantity,
+        // Snapshot price at time of purchase
+        price: product.price,
+      });
 
-        await tx
-          .update(products)
-          .set({ stock: product.stock - item.quantity, updatedAt: new Date() })
-          .where(eq(products.id, item.product_id));
-      }
-
-      return newOrder;
-    });
+      await db
+        .update(products)
+        .set({ stock: product.stock - item.quantity, updatedAt: new Date() })
+        .where(eq(products.id, item.product_id));
+    }
 
     return Response.json(
       {
         message: "Order created successfully",
         order: {
-          id: result.id,
-          userId: result.userId,
-          totalPrice: result.totalPrice,
-          status: result.status,
-          createdAt: result.createdAt,
+          id: newOrder.id,
+          userId: newOrder.userId,
+          totalPrice: newOrder.totalPrice,
+          status: newOrder.status,
+          createdAt: newOrder.createdAt,
         },
       },
       { status: 201 }
     );
   } catch (err) {
-    // طباعة الخطأ الحقيقي في الـ Terminal لتشخيصه بدقة
     console.error("ORDER CREATION ERROR:", err);
     return Response.json(
       { error: "Failed to create order. Please try again." },
